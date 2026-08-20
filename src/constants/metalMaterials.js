@@ -20,7 +20,7 @@ export const METAL_CONFIGS = {
     name: '18K White Gold',
     color: '#E0E0E6',
     metalness: 0.98,
-    roughness: 0.05,
+    roughness: 0.10,
     envMapIntensity: 1.3,
     swatchGradient: 'linear-gradient(135deg, #FFFFFF 0%, #D0D0D0 50%, #8A8A8A 100%)',
     description: 'Sleek platinum white gold finish with crisp specular sheen'

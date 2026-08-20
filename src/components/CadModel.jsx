@@ -24,20 +24,24 @@ function isGemMesh(mesh) {
 /**
  * Procedural Fallback Ring Setting (Used if CAD model URL is empty or fails)
  */
-function ProceduralRingSetting({ metalConfig, finishType, diamondConfig, cubeTexture, diamondPlacement }) {
+function ProceduralRingSetting({ metalConfig, finishType, diamondConfig, cubeTexture, diamondPlacement, metalEnvMap, metalEnvIntensity = 1.0 }) {
   const { nodes } = useGLTF('/dflat.glb')
   const roughnessOffset = finishType === 'satin' ? 0.18 : 0;
   
   const material = useMemo(() => {
-    return new THREE.MeshPhysicalMaterial({
+    const mat = new THREE.MeshPhysicalMaterial({
       color: new THREE.Color(metalConfig.color),
       metalness: metalConfig.metalness,
       roughness: Math.min(1.0, metalConfig.roughness + roughnessOffset),
-      envMapIntensity: metalConfig.envMapIntensity,
+      envMapIntensity: metalConfig.envMapIntensity * metalEnvIntensity,
       clearcoat: finishType === 'polished' ? 0.1 : 0,
       clearcoatRoughness: 0.1,
     })
-  }, [metalConfig, finishType, roughnessOffset]);
+    if (metalEnvMap) {
+      mat.envMap = metalEnvMap
+    }
+    return mat
+  }, [metalConfig, finishType, roughnessOffset, metalEnvMap, metalEnvIntensity]);
 
   return (
     <group position={[0, -0.65, 0]}>
@@ -77,12 +81,14 @@ function ProceduralRingSetting({ metalConfig, finishType, diamondConfig, cubeTex
           scale={diamondPlacement?.scale ?? 1}
         >
           <MeshRefractionMaterial
+            key={cubeTexture?.texture?.uuid || cubeTexture?.uuid || 'fallback_diamond_mat'}
             envMap={cubeTexture}
             bounces={diamondConfig?.bounces ?? 3}
             aberrationStrength={diamondConfig?.aberrationStrength ?? 0.01}
             ior={diamondConfig?.ior ?? 2.417}
             fresnel={diamondConfig?.fresnel ?? 0.25}
             color={diamondConfig?.color ?? '#ffffff'}
+            fastChroma={false}
             toneMapped={true}
           />
         </mesh>
@@ -97,7 +103,7 @@ function ProceduralRingSetting({ metalConfig, finishType, diamondConfig, cubeTex
  * - Metal parts receive dynamic PBR MeshPhysicalMaterial (Yellow Gold, White Gold, Rose Gold).
  * - Embedded Diamond parts receive MeshRefractionMaterial with live controls from app.js.
  */
-function ExternalCadModel({ modelUrl, metalConfig, finishType, diamondConfig, cubeTexture, diamondPlacement }) {
+function ExternalCadModel({ modelUrl, metalConfig, finishType, diamondConfig, cubeTexture, diamondPlacement, metalEnvMap, metalEnvIntensity = 1.0 }) {
   const safeUrl = useMemo(() => encodeURI(modelUrl), [modelUrl])
   const { scene } = useGLTF(safeUrl)
 
@@ -149,21 +155,25 @@ function ExternalCadModel({ modelUrl, metalConfig, finishType, diamondConfig, cu
             color: targetColor,
             metalness: metalConfig.metalness,
             roughness: Math.min(1.0, metalConfig.roughness + roughnessOffset),
-            envMapIntensity: metalConfig.envMapIntensity,
+            envMapIntensity: metalConfig.envMapIntensity * metalEnvIntensity,
             clearcoat: finishType === 'polished' ? 0.1 : 0,
             clearcoatRoughness: 0.1,
+            envMap: metalEnvMap || null
           })
         } else {
           child.material.color.copy(targetColor)
           child.material.metalness = metalConfig.metalness
           child.material.roughness = Math.min(1.0, metalConfig.roughness + roughnessOffset)
-          child.material.envMapIntensity = metalConfig.envMapIntensity
+          child.material.envMapIntensity = metalConfig.envMapIntensity * metalEnvIntensity
           child.material.clearcoat = finishType === 'polished' ? 0.1 : 0
+          if (metalEnvMap) {
+            child.material.envMap = metalEnvMap
+          }
           child.material.needsUpdate = true
         }
       }
     })
-  }, [metalScene, metalConfig, finishType])
+  }, [metalScene, metalConfig, finishType, metalEnvMap, metalEnvIntensity])
 
   return (
     <group>
@@ -182,12 +192,14 @@ function ExternalCadModel({ modelUrl, metalConfig, finishType, diamondConfig, cu
             scale={diamondPlacement?.scale ?? 1}
           >
             <MeshRefractionMaterial
+              key={cubeTexture?.texture?.uuid || cubeTexture?.uuid || `gem_${index}`}
               envMap={cubeTexture}
               bounces={diamondConfig?.bounces ?? 3}
               aberrationStrength={diamondConfig?.aberrationStrength ?? 0.01}
               ior={diamondConfig?.ior ?? 2.417}
               fresnel={diamondConfig?.fresnel ?? 0.25}
               color={diamondConfig?.color ?? '#ffffff'}
+              fastChroma={false}
               toneMapped={true}
             />
           </mesh>
@@ -200,6 +212,8 @@ function ExternalCadModel({ modelUrl, metalConfig, finishType, diamondConfig, cu
           diamondConfig={diamondConfig}
           cubeTexture={cubeTexture}
           diamondPlacement={diamondPlacement}
+          metalEnvMap={metalEnvMap}
+          metalEnvIntensity={metalEnvIntensity}
         />
       )}
     </group>
@@ -240,7 +254,9 @@ export default function CadModel({
   finishType = 'polished',
   diamondConfig,
   cubeTexture,
-  diamondPlacement
+  diamondPlacement,
+  metalEnvMap,
+  metalEnvIntensity
 }) {
   const metalConfig = METAL_CONFIGS[activeMetal] || METAL_CONFIGS.yellow_gold
 
@@ -252,6 +268,8 @@ export default function CadModel({
         diamondConfig={diamondConfig}
         cubeTexture={cubeTexture}
         diamondPlacement={diamondPlacement}
+        metalEnvMap={metalEnvMap}
+        metalEnvIntensity={metalEnvIntensity}
       />
     )
   }
@@ -263,6 +281,8 @@ export default function CadModel({
       diamondConfig={diamondConfig}
       cubeTexture={cubeTexture}
       diamondPlacement={diamondPlacement}
+      metalEnvMap={metalEnvMap}
+      metalEnvIntensity={metalEnvIntensity}
     />
   )
 
@@ -276,6 +296,8 @@ export default function CadModel({
           diamondConfig={diamondConfig}
           cubeTexture={cubeTexture}
           diamondPlacement={diamondPlacement}
+          metalEnvMap={metalEnvMap}
+          metalEnvIntensity={metalEnvIntensity}
         />
       </React.Suspense>
     </ModelErrorBoundary>

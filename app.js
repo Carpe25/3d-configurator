@@ -1,7 +1,6 @@
-import React, { useState, Suspense } from 'react'
-import { Canvas, useLoader } from '@react-three/fiber'
+import React, { useState, Suspense, useMemo } from 'react'
+import { Canvas, useLoader, useThree } from '@react-three/fiber'
 import {
-    CubeCamera,
     Environment,
     OrbitControls,
     ContactShadows,
@@ -46,9 +45,43 @@ function Loader() {
 }
 
 function SceneContent({ activeMetal, finishType, cadFileName, diamondConfig, diamondPlacement }) {
-    // Load HDRI texture locally from public/docklands_02_4k.hdr
-    const texture = useLoader(RGBELoader, '/studio_small_03_4k.hdr')
-    texture.mapping = THREE.EquirectangularReflectionMapping
+    const { gl } = useThree()
+
+    // Separate HDRI textures for Metal (smooth studio) vs Diamond (high-contrast studio)
+    const metalTexture = useLoader(RGBELoader, '/studio_small_03_4k.hdr')
+    const diamondTexture = useLoader(RGBELoader, '/modern_buildings_2_4k.hdr')
+
+    metalTexture.mapping = THREE.EquirectangularReflectionMapping
+    diamondTexture.mapping = THREE.EquirectangularReflectionMapping
+
+    // Generate a pure 6-faced CubeTexture directly from diamondTexture using an isolated sky sphere.
+    // This guarantees the diamond reflects ONLY the pure HDRI environment without any metal ring reflections or background interference!
+    const diamondCubeTexture = useMemo(() => {
+        if (!diamondTexture || !gl) return null
+
+        const tempScene = new THREE.Scene()
+        const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(512, {
+            format: THREE.RGBAFormat,
+            generateMipmaps: true,
+            minFilter: THREE.LinearMipmapLinearFilter,
+        })
+        const cubeCamera = new THREE.CubeCamera(0.1, 1000, cubeRenderTarget)
+
+        const sphereGeo = new THREE.SphereGeometry(100, 32, 32)
+        const sphereMat = new THREE.MeshBasicMaterial({
+            map: diamondTexture,
+            side: THREE.BackSide,
+        })
+        const sphereMesh = new THREE.Mesh(sphereGeo, sphereMat)
+        tempScene.add(sphereMesh)
+
+        cubeCamera.update(gl, tempScene)
+
+        sphereGeo.dispose()
+        sphereMat.dispose()
+
+        return cubeRenderTarget.texture
+    }, [diamondTexture, gl])
 
     return (
         <>
@@ -60,19 +93,17 @@ function SceneContent({ activeMetal, finishType, cadFileName, diamondConfig, dia
             <directionalLight position={[5, 12, 5]} intensity={1.5} castShadow shadow-mapSize={[2048, 2048]} />
             <directionalLight position={[-5, 8, -5]} intensity={0.5} />
 
-            {/* Dynamic CubeCamera providing sharp environment reflections to CAD Diamond */}
-            <CubeCamera resolution={256} frames={1} envMap={texture}>
-                {(cubeTexture) => (
-                    <CadModel
-                        modelUrl={cadFileName}
-                        activeMetal={activeMetal}
-                        finishType={finishType}
-                        diamondConfig={diamondConfig}
-                        cubeTexture={cubeTexture}
-                        diamondPlacement={diamondPlacement}
-                    />
-                )}
-            </CubeCamera>
+            {/* CAD Model with dedicated Metal HDRI and Direct Pure Diamond HDRI */}
+            <CadModel
+                modelUrl={cadFileName}
+                activeMetal={activeMetal}
+                finishType={finishType}
+                diamondConfig={diamondConfig}
+                cubeTexture={diamondCubeTexture}
+                diamondPlacement={diamondPlacement}
+                metalEnvMap={metalTexture}
+                metalEnvIntensity={1.0}
+            />
 
             {/* Crisp Clean Contact Shadow Directly Under Ring Base */}
             <ContactShadows
@@ -84,8 +115,8 @@ function SceneContent({ activeMetal, finishType, cadFileName, diamondConfig, dia
                 color="#000000"
             />
 
-            {/* Studio HDRI Environment */}
-            <Environment map={texture} background={false} />
+            {/* Global Metal Studio HDRI Environment */}
+            <Environment map={metalTexture} background={false} />
             <OrbitControls makeDefault autoRotate autoRotateSpeed={0.3} minPolarAngle={0} maxPolarAngle={Math.PI / 2 + 0.05} />
         </>
     )
@@ -106,7 +137,7 @@ export default function App() {
         color: '#ffffff',
     })
 
-    // Leva controls to fine-tune diamond position if needed (default [0, 0, 0] locks to CAD native placement)
+    // Leva controls to fine-tune diamond position/offset if needed
     const diamondPlacement = useControls('Diamond Placement / Offset', {
         posX: { value: 0, min: -3, max: 3, step: 0.01 },
         posY: { value: 0, min: -3, max: 5, step: 0.01 },
