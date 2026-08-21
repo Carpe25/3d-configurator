@@ -48,8 +48,8 @@ function SceneContent({ activeMetal, finishType, cadFileName, diamondConfig, dia
     const { gl } = useThree()
 
     // Separate HDRI textures for Metal (smooth studio) vs Diamond (high-contrast studio)
-    const metalTexture = useLoader(RGBELoader, '/studio_small_03_4k.hdr')
-    const diamondTexture = useLoader(RGBELoader, '/modern_buildings_2_4k.hdr')
+    const metalTexture = useLoader(RGBELoader, '/small_empty_room_1_4k.hdr')
+    const diamondTexture = useLoader(RGBELoader, '/small_empty_room_1_4k.hdr')
 
     metalTexture.mapping = THREE.EquirectangularReflectionMapping
     diamondTexture.mapping = THREE.EquirectangularReflectionMapping
